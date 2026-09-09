@@ -5,11 +5,31 @@ import zlib
 from tkinter import filedialog, messagebox
 
 
-# .profile file format:
-#   4 bytes  magic: PBLD
-#   1 byte   format version: 1
-#   4 bytes  big-endian compressed payload length
-#   N bytes  zlib-compressed UTF-8 JSON payload
+# .profile format — open and documented specification:
+#   Offset  Size  Field
+#   0       4     Magic ASCII bytes: PBLD
+#   4       1     Format version: 1
+#   5       4     Compressed payload length, unsigned big-endian 32-bit
+#   9       N     zlib-compressed UTF-8 JSON payload
+#
+# After decompression, version 1 contains:
+# {
+#   "version": 1,
+#   "profile": {
+#     "Name": "...",
+#     "Age": "...",
+#     "Date of Birth": "...",
+#     "Likes": "...",
+#     "Does not like": "...",
+#     "Street": "...",
+#     "Number": "...",
+#     "Town": "...",
+#     "Country": "..."
+#   }
+# }
+#
+# This format is intentionally public: other programs may implement readers
+# and writers using the specification above. It is compressed, NOT encrypted.
 MAGIC = b"PBLD"
 FORMAT_VERSION = 1
 HEADER = struct.Struct(">4sBI")
