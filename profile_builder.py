@@ -40,7 +40,7 @@ def blob_to_profile(data):
 
     magic, version, payload_length = HEADER.unpack(data[:HEADER.size])
     if magic != MAGIC:
-        raise ValueError("Not a Profile Builder .profile file.")
+        raise ValueError("Not a Profile Builder binary .profile file.")
     if version != FORMAT_VERSION:
         raise ValueError(f"Unsupported .profile format version: {version}")
 
@@ -64,8 +64,62 @@ def blob_to_profile(data):
     return {label: str(profile.get(label, "")) for label in FIELD_NAMES}
 
 
+def legacy_text_to_profile(text):
+    """Read the original human-readable .profile format.
+
+    The original format stored all four address fields on one line, so the
+    address cannot always be split back into its original components. In that
+    case the complete address is placed in the Street field rather than
+    silently losing it.
+    """
+    values = {}
+    expected = {
+        "Name": "Name",
+        "Age": "Age",
+        "Date of Birth": "Date of Birth",
+        "Likes": "Likes",
+        "Does not like": "Does not like",
+        "Address": "Address",
+    }
+
+    for line in text.splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        key = key.strip()
+        if key in expected:
+            values[expected[key]] = value.strip()
+
+    required = ("Name", "Age", "Date of Birth", "Likes", "Does not like", "Address")
+    if not any(key in values for key in required):
+        raise ValueError("The text file does not look like a legacy Profile Builder profile.")
+
+    profile = {label: "" for label in FIELD_NAMES}
+    for label in ("Name", "Age", "Date of Birth", "Likes", "Does not like"):
+        profile[label] = values.get(label, "")
+
+    # Old files had no separators between Street/Number/Town/Country.
+    profile["Street"] = values.get("Address", "")
+    return profile
+
+
+def read_profile(data):
+    """Read either the current binary format or the original text format."""
+    if data.startswith(MAGIC):
+        return blob_to_profile(data), False
+
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ValueError("The file is neither a valid binary nor a UTF-8 text profile.") from exc
+
+    return legacy_text_to_profile(text), True
+
+
 def display_profile(profile):
-    address = " ".join(profile[label] for label in ("Street", "Number", "Town", "Country")).strip()
+    address = " ".join(
+        profile[label] for label in ("Street", "Number", "Town", "Country")
+    ).strip()
     return (
         f"Name: {profile['Name']}\n"
         f"Age: {profile['Age']}\n"
@@ -92,7 +146,7 @@ def open_profile():
     try:
         with open(filename, "rb") as file:
             data = file.read()
-        profile = blob_to_profile(data)
+        profile, legacy = read_profile(data)
     except (OSError, ValueError) as exc:
         messagebox.showerror("Open profile", f"Could not open the selected profile.\n\n{exc}")
         return
@@ -100,7 +154,15 @@ def open_profile():
     load_fields(profile)
     output.delete("1.0", tk.END)
     output.insert(tk.END, display_profile(profile))
-    messagebox.showinfo("Profile opened", "The profile was opened successfully.")
+
+    if legacy:
+        messagebox.showinfo(
+            "Legacy profile opened",
+            "This is an older text .profile file.\n\n"
+            "It was loaded successfully. Save it to convert it to the new binary format."
+        )
+    else:
+        messagebox.showinfo("Profile opened", "The profile was opened successfully.")
 
 
 def save_profile():
