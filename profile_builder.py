@@ -1,5 +1,85 @@
+import json
+import struct
 import tkinter as tk
+import zlib
 from tkinter import filedialog, messagebox
+
+
+# .profile file format:
+#   4 bytes  magic: PBLD
+#   1 byte   format version: 1
+#   4 bytes  big-endian compressed payload length
+#   N bytes  zlib-compressed UTF-8 JSON payload
+MAGIC = b"PBLD"
+FORMAT_VERSION = 1
+HEADER = struct.Struct(">4sBI")
+
+FIELD_NAMES = (
+    "Name", "Age", "Date of Birth", "Likes", "Does not like",
+    "Street", "Number", "Town", "Country",
+)
+
+
+def build_profile():
+    return {label: fields[label].get().strip() for label in FIELD_NAMES}
+
+
+def profile_to_blob(profile):
+    payload = json.dumps(
+        {"version": FORMAT_VERSION, "profile": profile},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    compressed = zlib.compress(payload, level=9)
+    return HEADER.pack(MAGIC, FORMAT_VERSION, len(compressed)) + compressed
+
+
+def blob_to_profile(data):
+    if len(data) < HEADER.size:
+        raise ValueError("File is too small to be a Profile Builder file.")
+
+    magic, version, payload_length = HEADER.unpack(data[:HEADER.size])
+    if magic != MAGIC:
+        raise ValueError("Not a Profile Builder .profile file.")
+    if version != FORMAT_VERSION:
+        raise ValueError(f"Unsupported .profile format version: {version}")
+
+    payload = data[HEADER.size:]
+    if len(payload) != payload_length:
+        raise ValueError("The .profile file is truncated or corrupted.")
+
+    try:
+        decoded = zlib.decompress(payload).decode("utf-8")
+        document = json.loads(decoded)
+    except (zlib.error, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("The .profile file contains an invalid payload.") from exc
+
+    if document.get("version") != FORMAT_VERSION:
+        raise ValueError("The .profile payload version is unsupported.")
+
+    profile = document.get("profile")
+    if not isinstance(profile, dict):
+        raise ValueError("The .profile file does not contain a valid profile.")
+
+    return {label: str(profile.get(label, "")) for label in FIELD_NAMES}
+
+
+def display_profile(profile):
+    address = " ".join(profile[label] for label in ("Street", "Number", "Town", "Country")).strip()
+    return (
+        f"Name: {profile['Name']}\n"
+        f"Age: {profile['Age']}\n"
+        f"Date of Birth: {profile['Date of Birth']}\n"
+        f"Likes: {profile['Likes']}\n"
+        f"Does not like: {profile['Does not like']}\n"
+        f"Address: {address}\n"
+    )
+
+
+def load_fields(profile):
+    for label in FIELD_NAMES:
+        fields[label].delete(0, tk.END)
+        fields[label].insert(0, profile[label])
 
 
 def open_profile():
@@ -10,46 +90,41 @@ def open_profile():
         return
 
     try:
-        with open(filename, "r", encoding="utf-8") as file:
-            content = file.read()
-    except OSError:
-        messagebox.showerror("Open profile", "Could not open the selected profile.")
+        with open(filename, "rb") as file:
+            data = file.read()
+        profile = blob_to_profile(data)
+    except (OSError, ValueError) as exc:
+        messagebox.showerror("Open profile", f"Could not open the selected profile.\n\n{exc}")
         return
 
+    load_fields(profile)
     output.delete("1.0", tk.END)
-    output.insert(tk.END, content)
+    output.insert(tk.END, display_profile(profile))
     messagebox.showinfo("Profile opened", "The profile was opened successfully.")
 
 
 def save_profile():
-    values = {label: entry.get().strip() for label, entry in fields.items()}
-    address = " ".join(values.pop(label) for label in ("Street", "Number", "Town", "Country"))
-
-    profile = (
-        f"Name: {values['Name']}\n"
-        f"Age: {values['Age']}\n"
-        f"Date of Birth: {values['Date of Birth']}\n"
-        f"Likes: {values['Likes']}\n"
-        f"Does not like: {values['Does not like']}\n"
-        f"Address: {address}\n"
-    )
+    profile = build_profile()
+    data = profile_to_blob(profile)
 
     filename = filedialog.asksaveasfilename(
         defaultextension=".profile",
         filetypes=[("Profile files", "*.profile"), ("All files", "*.*")],
         initialfile="profile.profile",
     )
-    if filename:
-        try:
-            with open(filename, "w", encoding="utf-8") as file:
-                file.write(profile)
-        except OSError:
-            messagebox.showerror("Save profile", "Could not save the profile.")
-            return
+    if not filename:
+        return
 
-        output.delete("1.0", tk.END)
-        output.insert(tk.END, profile)
-        messagebox.showinfo("Profile saved", "The profile was saved successfully.")
+    try:
+        with open(filename, "wb") as file:
+            file.write(data)
+    except OSError:
+        messagebox.showerror("Save profile", "Could not save the profile.")
+        return
+
+    output.delete("1.0", tk.END)
+    output.insert(tk.END, display_profile(profile))
+    messagebox.showinfo("Profile saved", "The profile was saved successfully.")
 
 
 root = tk.Tk()
@@ -60,25 +135,21 @@ form = tk.Frame(root, padx=16, pady=16)
 form.pack()
 
 fields = {}
-field_names = (
-    "Name", "Age", "Date of Birth", "Likes", "Does not like",
-    "Street", "Number", "Town", "Country",
-)
-for row, label in enumerate(field_names):
+for row, label in enumerate(FIELD_NAMES):
     tk.Label(form, text=f"{label}:").grid(row=row, column=0, sticky="w", pady=3)
     entry = tk.Entry(form, width=38)
     entry.grid(row=row, column=1, pady=3, padx=(8, 0))
     fields[label] = entry
 
 tk.Button(form, text="Open .profile", command=open_profile).grid(
-    row=len(field_names), column=0, pady=(12, 8), sticky="ew"
+    row=len(FIELD_NAMES), column=0, pady=(12, 8), sticky="ew"
 )
 tk.Button(form, text="Save .profile", command=save_profile).grid(
-    row=len(field_names), column=1, pady=(12, 8), sticky="ew", padx=(8, 0)
+    row=len(FIELD_NAMES), column=1, pady=(12, 8), sticky="ew", padx=(8, 0)
 )
 
-tk.Label(form, text="Output:").grid(row=len(field_names) + 1, column=0, sticky="nw")
+tk.Label(form, text="Output:").grid(row=len(FIELD_NAMES) + 1, column=0, sticky="nw")
 output = tk.Text(form, width=38, height=7, state=tk.NORMAL)
-output.grid(row=len(field_names) + 1, column=1, padx=(8, 0))
+output.grid(row=len(FIELD_NAMES) + 1, column=1, padx=(8, 0))
 
 root.mainloop()
