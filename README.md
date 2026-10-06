@@ -77,13 +77,9 @@ The format version allows the format to evolve without silently misreading files
 
 The binary format is **not encryption**. zlib compression only reduces size and obscures the plain text from casual viewing; it does not provide confidentiality. Anyone can decode a `.profile` file using this public specification. Do not use `.profile` files for passwords, secrets, or sensitive information that requires encryption.
 
-### Legacy text profiles
+### Old text profiles
 
-Earlier versions of Profile Builder saved `.profile` files as human-readable text. The current version can still open those files.
-
-When an old text profile is opened, its contents are loaded into the editor and a notice is shown. Saving it again writes it in the current binary format.
-
-The original text format stored the complete address on one line, so its individual Street, Number, Town, and Country components cannot always be recovered reliably. For legacy files, the complete address is therefore loaded into the Street field rather than being silently discarded.
+Earlier versions of Profile Builder saved `.profile` files as human-readable text. The current version cannot still open those files.
 
 ## Reference implementation
 
@@ -92,14 +88,6 @@ The original text format stored the complete address on one line, so its individ
 ## Requirements
 
 - Python 3
-- Tkinter
-
-On Debian/Ubuntu-based Linux systems, Tkinter may be installed with:
-
-```bash
-sudo apt install python3-tk
-```
-
 ## Run
 
 ```bash
