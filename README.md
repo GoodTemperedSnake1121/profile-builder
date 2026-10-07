@@ -11,7 +11,9 @@ A simple Python/Tkinter profile manager designed to make profile creation and ma
 - Open, documented `.profile` binary format
 - Versioned file format for future compatibility
 - Compressed JSON payload inside the binary container
-- Human-readable profile preview in the GUI
+- Live formatted profile preview that updates as you type
+- Copy the formatted profile text to the clipboard
+- Save and copy status shown in the application window
 - Uses Python's standard library and Tkinter
 
 ## `.profile` format
