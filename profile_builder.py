@@ -154,6 +154,20 @@ def load_fields(profile):
     for label in FIELD_NAMES:
         fields[label].delete(0, tk.END)
         fields[label].insert(0, profile[label])
+    refresh_preview()
+
+
+def refresh_preview(_event=None):
+    """Keep the formatted profile preview in sync with the form."""
+    output.delete("1.0", tk.END)
+    output.insert(tk.END, display_profile(build_profile()))
+
+
+def copy_profile():
+    """Copy the formatted profile text to the clipboard."""
+    root.clipboard_clear()
+    root.clipboard_append(display_profile(build_profile()))
+    status.configure(text="Profile copied to clipboard", fg="#15803D")
 
 
 def open_profile():
@@ -172,8 +186,6 @@ def open_profile():
         return
 
     load_fields(profile)
-    output.delete("1.0", tk.END)
-    output.insert(tk.END, display_profile(profile))
 
     if legacy:
         messagebox.showinfo(
@@ -204,13 +216,15 @@ def save_profile():
         messagebox.showerror("Save profile", "Could not save the profile.")
         return
 
-    output.delete("1.0", tk.END)
-    output.insert(tk.END, display_profile(profile))
+    refresh_preview()
+    status.configure(text="Profile saved successfully", fg="#15803D")
     messagebox.showinfo("Profile saved", "The profile was saved successfully.")
 
 
 root = tk.Tk()
-root.title("Profile Builder")
+APP_VERSION = "1.4.0"
+
+root.title(f"Profile Builder {APP_VERSION}")
 root.resizable(False, False)
 
 form = tk.Frame(root, padx=16, pady=16)
@@ -229,9 +243,20 @@ tk.Button(form, text="Open .profile", command=open_profile).grid(
 tk.Button(form, text="Save .profile", command=save_profile).grid(
     row=len(FIELD_NAMES), column=1, pady=(12, 8), sticky="ew", padx=(8, 0)
 )
+tk.Button(form, text="Copy text", command=copy_profile).grid(
+    row=len(FIELD_NAMES) + 2, column=0, columnspan=2,
+    pady=(0, 8), sticky="ew"
+)
 
 tk.Label(form, text="Output:").grid(row=len(FIELD_NAMES) + 1, column=0, sticky="nw")
 output = tk.Text(form, width=38, height=7, state=tk.NORMAL)
 output.grid(row=len(FIELD_NAMES) + 1, column=1, padx=(8, 0))
 
+status = tk.Label(form, text="Ready", anchor="w")
+status.grid(row=len(FIELD_NAMES) + 3, column=0, columnspan=2, sticky="ew")
+
+for entry in fields.values():
+    entry.bind("<KeyRelease>", refresh_preview)
+
+refresh_preview()
 root.mainloop()
